@@ -970,11 +970,13 @@ impl PlayerTrackLoader {
             SpotifyUri::Track { .. } | SpotifyUri::Episode { .. } => {
                 self.load_remote_track(track_uri, position_ms).await
             }
+            /* 
+            // That's a bad fix. But we control what we do in uTriLib and TriLib, so whatever :P
             SpotifyUri::Local { .. } => self.load_local_track(track_uri, position_ms).await,
             _ => {
                 error!("Cannot handle load of track with URI: <{track_uri}>",);
                 None
-            }
+            }*/
         }
     }
 
@@ -2406,7 +2408,8 @@ impl PlayerInternal {
         let loader = PlayerTrackLoader {
             session: self.session.clone(),
             config: self.config.clone(),
-            local_file_lookup: self.local_file_lookup.clone(),
+            //local_file_lookup: self.local_file_lookup.clone(),
+            // We don't do that around here
         };
 
         let (result_tx, result_rx) = oneshot::channel();
