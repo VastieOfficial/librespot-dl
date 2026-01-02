@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
-    fmt, fs,
-    fs::File,
+    fmt,
     future::Future,
     io::{self, Read, Seek, SeekFrom},
     mem,
@@ -26,7 +25,6 @@ use crate::{
     convert::Converter,
     core::{Error, Session, SpotifyId, SpotifyUri, util::SeqGenerator},
     decoder::{AudioDecoder, AudioPacket, AudioPacketPosition, SymphoniaDecoder},
-    local_file::{LocalFileLookup, create_local_file_lookup},
     metadata::audio::{AudioFileFormat, AudioFiles, AudioItem},
     mixer::VolumeGetter,
 };
@@ -34,10 +32,8 @@ use futures_util::{
     StreamExt, TryFutureExt, future, future::FusedFuture,
     stream::futures_unordered::FuturesUnordered,
 };
-use librespot_metadata::{audio::UniqueFields, track::Tracks};
-
+use librespot_metadata::track::Tracks;
 use symphonia::core::io::MediaSource;
-use symphonia::core::probe::Hint;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::SAMPLES_PER_SECOND;
@@ -93,8 +89,6 @@ struct PlayerInternal {
     player_id: usize,
     play_request_id_generator: SeqGenerator<u64>,
     last_progress_update: Instant,
-
-    local_file_lookup: Arc<LocalFileLookup>,
 }
 
 static PLAYER_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -477,12 +471,6 @@ impl Player {
             let converter = Converter::new(config.ditherer);
             let normalisation_knee_factor = 1.0 / (8.0 * config.normalisation_knee_db);
 
-            // TODO: it would be neat if we could watch for added or modified files in the
-            // specified directories, and dynamically update the lookup. Currently, a new player
-            // must be created for any new local files to be playable.
-            let local_file_lookup =
-                create_local_file_lookup(config.local_file_directories.as_slice());
-
             let internal = PlayerInternal {
                 session,
                 config,
@@ -508,8 +496,6 @@ impl Player {
                 player_id,
                 play_request_id_generator: SeqGenerator::new(0),
                 last_progress_update: Instant::now(),
-
-                local_file_lookup: Arc::new(local_file_lookup),
             };
 
             // While PlayerInternal is written as a future, it still contains blocking code.
@@ -661,7 +647,7 @@ impl Drop for Player {
     }
 }
 
-struct PlayerLoadedTrackData {
+pub struct PlayerLoadedTrackData {
     decoder: Decoder,
     normalisation_data: NormalisationData,
     stream_loader_controller: StreamLoaderController,
@@ -895,12 +881,6 @@ impl PlayerState {
         }
     }
 }
-
-pub struct PlayerTrackLoader {
-    session: Session,
-    config: PlayerConfig,
-}
-
 
 pub struct PlayerTrackLoader {
     pub session: Session,
@@ -1328,7 +1308,6 @@ impl PlayerTrackLoader {
 
 
 }
-
 
 impl Future for PlayerInternal {
     type Output = ();
@@ -2407,7 +2386,6 @@ impl PlayerInternal {
         let loader = PlayerTrackLoader {
             session: self.session.clone(),
             config: self.config.clone(),
-            local_file_lookup: self.local_file_lookup.clone(),
         };
 
         let (result_tx, result_rx) = oneshot::channel();
