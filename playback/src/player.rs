@@ -19,7 +19,7 @@ use std::{
 #[cfg(feature = "passthrough-decoder")]
 use crate::decoder::PassthroughDecoder;
 use crate::{
-    audio::{AudioDecrypt, AudioFetchParams, AudioFile, StreamLoaderController},
+    audio::{AudioDecrypt, AudioFetchParams, AudioFile, StreamLoaderController}, 
     audio_backend::Sink,
     config::{Bitrate, NormalisationMethod, NormalisationType, PlayerConfig},
     convert::Converter,
