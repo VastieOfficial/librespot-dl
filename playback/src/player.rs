@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
-    fmt,
+    fmt, fs,
+    fs::File,
     future::Future,
     io::{self, Read, Seek, SeekFrom},
     mem,
@@ -25,6 +26,7 @@ use crate::{
     convert::Converter,
     core::{Error, Session, SpotifyId, SpotifyUri, util::SeqGenerator},
     decoder::{AudioDecoder, AudioPacket, AudioPacketPosition, SymphoniaDecoder},
+    local_file::{LocalFileLookup, create_local_file_lookup},
     metadata::audio::{AudioFileFormat, AudioFiles, AudioItem},
     mixer::VolumeGetter,
 };
@@ -32,7 +34,8 @@ use futures_util::{
     StreamExt, TryFutureExt, future, future::FusedFuture,
     stream::futures_unordered::FuturesUnordered,
 };
-use librespot_metadata::track::Tracks;
+use librespot_metadata::{audio::UniqueFields, track::Tracks};
+
 use symphonia::core::{
     io::{MediaSource},
     probe::{Hint, ProbeResult},
@@ -93,6 +96,8 @@ struct PlayerInternal {
     player_id: usize,
     play_request_id_generator: SeqGenerator<u64>,
     last_progress_update: Instant,
+
+    local_file_lookup: Arc<LocalFileLookup>,
 }
 
 static PLAYER_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -475,6 +480,12 @@ impl Player {
             let converter = Converter::new(config.ditherer);
             let normalisation_knee_factor = 1.0 / (8.0 * config.normalisation_knee_db);
 
+            // TODO: it would be neat if we could watch for added or modified files in the
+            // specified directories, and dynamically update the lookup. Currently, a new player
+            // must be created for any new local files to be playable.
+            let local_file_lookup =
+                create_local_file_lookup(config.local_file_directories.as_slice());
+
             let internal = PlayerInternal {
                 session,
                 config,
@@ -500,6 +511,8 @@ impl Player {
                 player_id,
                 play_request_id_generator: SeqGenerator::new(0),
                 last_progress_update: Instant::now(),
+
+                local_file_lookup: Arc::new(local_file_lookup),
             };
 
             // While PlayerInternal is written as a future, it still contains blocking code.
@@ -957,6 +970,7 @@ impl PlayerTrackLoader {
             SpotifyUri::Track { .. } | SpotifyUri::Episode { .. } => {
                 self.load_remote_track(track_uri, position_ms).await
             }
+            SpotifyUri::Local { .. } => self.load_local_track(track_uri, position_ms).await,
             _ => {
                 error!("Cannot handle load of track with URI: <{track_uri}>",);
                 None
@@ -981,10 +995,7 @@ impl PlayerTrackLoader {
             Ok(audio) => match self.find_available_alternative(audio).await {
                 Some(audio) => audio,
                 None => {
-                    warn!(
-                        "ID <{}> is not available",
-                        track_id.to_base62()
-                    );
+                    warn!("spotify:track:<{}> is not available", track_id.to_base62());
                     return None;
                 }
             },
@@ -1125,7 +1136,7 @@ impl PlayerTrackLoader {
             };
 
             #[cfg(not(feature = "passthrough-decoder"))]
-            let decoder_type = symphonia_decoder(audio_file, hint);
+            let decoder_type = { symphonia_decoder(audio_file, hint) };
 
             let normalisation_data = normalisation_data.unwrap_or_else(|| {
                 warn!("Unable to get normalisation data, continuing with defaults.");
@@ -2395,6 +2406,7 @@ impl PlayerInternal {
         let loader = PlayerTrackLoader {
             session: self.session.clone(),
             config: self.config.clone(),
+            local_file_lookup: self.local_file_lookup.clone(),
         };
 
         let (result_tx, result_rx) = oneshot::channel();
