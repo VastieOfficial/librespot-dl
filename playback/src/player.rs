@@ -969,10 +969,10 @@ impl PlayerTrackLoader {
         match track_uri {
             SpotifyUri::Track { .. } | SpotifyUri::Episode { .. } => {
                 self.load_remote_track(track_uri, position_ms).await
-            }
-            /* 
-            // That's a bad fix. But we control what we do in uTriLib and TriLib, so whatever :P
-            SpotifyUri::Local { .. } => self.load_local_track(track_uri, position_ms).await,
+            },
+            
+            // SpotifyUri::Local { .. } => self.load_local_track(track_uri, position_ms).await, // That's a bad fix. But we control what we do in uTriLib and TriLib, so whatever :P
+            
             _ => {
                 error!("Cannot handle load of track with URI: <{track_uri}>",);
                 None
