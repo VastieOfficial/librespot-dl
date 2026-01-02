@@ -24,7 +24,7 @@ use crate::{
     config::{Bitrate, NormalisationMethod, NormalisationType, PlayerConfig},
     convert::Converter,
     core::{Error, Session, SpotifyId, SpotifyUri, util::SeqGenerator},
-    decoder::{AudioDecoder, AudioPacket, AudioPacketPosition, SymphoniaDecoder_AF},
+    decoder::{AudioDecoder, AudioPacket, AudioPacketPosition, SymphoniaDecoder},
     metadata::audio::{AudioFileFormat, AudioFiles, AudioItem},
     mixer::VolumeGetter,
 };
@@ -1098,7 +1098,7 @@ impl PlayerTrackLoader {
             };
 
             let mut symphonia_decoder = |audio_file, format| {
-                SymphoniaDecoder_AF::new(audio_file, format).map(|mut decoder| {
+                SymphoniaDecoder::new(audio_file, format).map(|mut decoder| {
                     // For formats other that Vorbis, we'll try getting normalisation data from
                     // ReplayGain metadata fields, if present.
                     if normalisation_data.is_none() {
