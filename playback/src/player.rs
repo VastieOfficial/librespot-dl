@@ -976,7 +976,7 @@ impl PlayerTrackLoader {
             _ => {
                 error!("Cannot handle load of track with URI: <{track_uri}>",);
                 None
-            }*/
+            }
         }
     }
 
