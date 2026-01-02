@@ -544,7 +544,13 @@ impl SpircTask {
                 // finish after we received our last item of a type
                 next_context = async {
                     self.context_resolver.get_next_context(|| {
+                        // Sending local file URIs to this endpoint results in a Bad Request status.
+                        // It's likely appropriate to filter them out anyway; Spotify's backend
+                        // has no knowledge about these tracks and so can't do anything with them.
                         self.connect_state.recent_track_uris()
+                            .into_iter()
+                            .filter(|t| !t.starts_with("spotify:local"))
+                            .collect::<Vec<_>>()
                     }).await
                 }, if allow_context_resolving && self.context_resolver.has_next() => {
                     let update_state = self.handle_next_context(next_context);
@@ -800,7 +806,7 @@ impl SpircTask {
             }
             PlayerEvent::Unavailable { track_id, .. } => {
                 self.handle_unavailable(&track_id)?;
-                if self.connect_state.current_track(|t| &t.uri) == &track_id.to_uri()? {
+                if self.connect_state.current_track(|t| &t.uri) == &track_id.to_uri() {
                     self.handle_next(None)?
                 }
             }

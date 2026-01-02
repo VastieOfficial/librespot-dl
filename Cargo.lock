@@ -1797,7 +1797,7 @@ dependencies = [
 
 [[package]]
 name = "librespot"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "data-encoding",
  "env_logger",
@@ -1821,7 +1821,7 @@ dependencies = [
 
 [[package]]
 name = "librespot-audio"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "aes",
  "bytes",
@@ -1839,7 +1839,7 @@ dependencies = [
 
 [[package]]
 name = "librespot-connect"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "futures-util",
  "librespot-core",
@@ -1857,7 +1857,7 @@ dependencies = [
 
 [[package]]
 name = "librespot-core"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "aes",
  "base64",
@@ -1913,7 +1913,7 @@ dependencies = [
 
 [[package]]
 name = "librespot-discovery"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "aes",
  "base64",
@@ -1944,7 +1944,7 @@ dependencies = [
 
 [[package]]
 name = "librespot-metadata"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1960,7 +1960,7 @@ dependencies = [
 
 [[package]]
 name = "librespot-oauth"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "env_logger",
  "log",
@@ -1974,10 +1974,11 @@ dependencies = [
 
 [[package]]
 name = "librespot-playback"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "alsa 0.10.0",
  "cpal",
+ "form_urlencoded",
  "futures-util",
  "gstreamer",
  "gstreamer-app",
@@ -2005,7 +2006,7 @@ dependencies = [
 
 [[package]]
 name = "librespot-protocol"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "protobuf",
  "protobuf-codegen",
@@ -2199,9 +2200,9 @@ dependencies = [
 
 [[package]]
 name = "num-bigint-dig"
-version = "0.8.5"
+version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82c79c15c05d4bf82b6f5ef163104cc81a760d8e874d38ac50ab67c8877b647b"
+checksum = "e661dda6640fad38e827a6d4a310ff4763082116fe217f279885c97f511bb0b7"
 dependencies = [
  "lazy_static",
  "libm",
