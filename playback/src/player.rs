@@ -978,8 +978,8 @@ impl PlayerTrackLoader {
                 Some(audio) => audio,
                 None => {
                     warn!(
-                        "spotify:track:<{}> is not available",
-                        track_id.to_base62().unwrap_or_default()
+                        "ID <{}> is not available",
+                        track_id.to_base62()
                     );
                     return None;
                 }
@@ -1218,7 +1218,7 @@ impl PlayerTrackLoader {
                 None => {
                     println!(
                         "[WARN] <{}> is not available",
-                        spotify_id.to_uri().unwrap_or_default()
+                        spotify_id.to_base62()
                     );
                     return decrypted_files;
                 }
