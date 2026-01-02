@@ -33,7 +33,11 @@ use futures_util::{
     stream::futures_unordered::FuturesUnordered,
 };
 use librespot_metadata::track::Tracks;
-use symphonia::core::io::MediaSource;
+use symphonia::core::{
+    io::{MediaSource},
+    probe::{Hint, ProbeResult},
+};
+
 use tokio::sync::{mpsc, oneshot};
 
 use crate::SAMPLES_PER_SECOND;
