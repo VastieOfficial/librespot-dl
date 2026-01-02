@@ -896,13 +896,23 @@ impl PlayerState {
     }
 }
 
-struct PlayerTrackLoader {
+pub struct PlayerTrackLoader {
     session: Session,
     config: PlayerConfig,
-    local_file_lookup: Arc<LocalFileLookup>,
+}
+
+
+pub struct PlayerTrackLoader {
+    pub session: Session,
+    pub config: PlayerConfig,
 }
 
 impl PlayerTrackLoader {
+
+    pub fn new(session: Session, config: PlayerConfig) -> Self {
+        PlayerTrackLoader { session, config }
+    }
+    
     async fn find_available_alternative(&self, audio_item: AudioItem) -> Option<AudioItem> {
         if let Err(e) = audio_item.availability {
             error!("Track is unavailable: {e}");
@@ -928,7 +938,7 @@ impl PlayerTrackLoader {
         }
     }
 
-    fn stream_data_rate(&self, format: AudioFileFormat) -> Option<usize> {
+     fn stream_data_rate(&self, format: AudioFileFormat) -> Option<usize> {
         let kbps = match format {
             AudioFileFormat::OGG_VORBIS_96 => 12.,
             AudioFileFormat::OGG_VORBIS_160 => 20.,
@@ -963,7 +973,6 @@ impl PlayerTrackLoader {
             SpotifyUri::Track { .. } | SpotifyUri::Episode { .. } => {
                 self.load_remote_track(track_uri, position_ms).await
             }
-            SpotifyUri::Local { .. } => self.load_local_track(track_uri, position_ms).await,
             _ => {
                 error!("Cannot handle load of track with URI: <{track_uri}>",);
                 None
@@ -988,7 +997,10 @@ impl PlayerTrackLoader {
             Ok(audio) => match self.find_available_alternative(audio).await {
                 Some(audio) => audio,
                 None => {
-                    warn!("spotify:track:<{}> is not available", track_id.to_base62());
+                    warn!(
+                        "spotify:track:<{}> is not available",
+                        track_id.to_base62().unwrap_or_default()
+                    );
                     return None;
                 }
             },
@@ -1116,20 +1128,15 @@ impl PlayerTrackLoader {
                 })
             };
 
-            let mut hint = Hint::new();
-            if let Some(mime_type) = AudioFiles::mime_type(format) {
-                hint.mime_type(mime_type);
-            }
-
             #[cfg(feature = "passthrough-decoder")]
             let decoder_type = if self.config.passthrough {
                 PassthroughDecoder::new(audio_file, format).map(|x| Box::new(x) as Decoder)
             } else {
-                symphonia_decoder(audio_file, hint)
+                symphonia_decoder(audio_file, format)
             };
 
             #[cfg(not(feature = "passthrough-decoder"))]
-            let decoder_type = { symphonia_decoder(audio_file, hint) };
+            let decoder_type = symphonia_decoder(audio_file, format);
 
             let normalisation_data = normalisation_data.unwrap_or_else(|| {
                 warn!("Unable to get normalisation data, continuing with defaults.");
@@ -1210,108 +1217,118 @@ impl PlayerTrackLoader {
         }
     }
 
-    async fn load_local_track(
-        &self,
-        track_uri: SpotifyUri,
-        position_ms: u32,
-    ) -> Option<PlayerLoadedTrackData> {
-        info!("Loading local file with Spotify URI <{}>", track_uri);
+    pub async fn load_decrypted_files(
+    &self,
+    spotify_id: SpotifyId,
+) -> Vec<(AudioFileFormat, AudioDecrypt<AudioFile>)> {
+    println!("[DEBUG] Starting `load_decrypted_files` for Spotify ID: {}", spotify_id);
 
-        let SpotifyUri::Local { duration, .. } = track_uri else {
-            error!("Unable to determine track duration for local file: not a local file URI");
-            return None;
-        };
+    let mut decrypted_files = Vec::new();
 
-        let entry = self.local_file_lookup.get(&track_uri);
+    println!("[DEBUG] Attempting to get AudioItem for Spotify ID: {}", spotify_id);
 
-        let Some(path) = entry else {
-            error!("Unable to find file path for local file <{track_uri}>");
-            return None;
-        };
-
-        let src = match File::open(path) {
-            Ok(src) => src,
-            Err(e) => {
-                error!("Failed to open local file: {e}");
-                return None;
-            }
-        };
-
-        let mut hint = Hint::new();
-        if let Some(file_extension) = path.extension().and_then(|e| e.to_str()) {
-            hint.with_extension(file_extension);
-        }
-
-        let decoder = match SymphoniaDecoder::new(src, hint) {
-            Ok(decoder) => decoder,
-            Err(e) => {
-                error!("Error decoding local file: {e}");
-                return None;
-            }
-        };
-
-        let mut decoder = Box::new(decoder);
-        let normalisation_data = decoder.normalisation_data().unwrap_or_else(|| {
-            warn!("Unable to get normalisation data, continuing with defaults.");
-            NormalisationData::default()
-        });
-
-        let local_file_metadata = decoder.local_file_metadata().unwrap_or_default();
-
-        let stream_position_ms = match decoder.seek(position_ms) {
-            Ok(new_position_ms) => new_position_ms,
-            Err(e) => {
-                error!(
-                    "PlayerTrackLoader::load_local_track error seeking to starting position {position_ms}: {e}"
-                );
-                return None;
-            }
-        };
-
-        let file_size = fs::metadata(path).ok()?.len();
-        let bytes_per_second = (file_size / duration.as_secs()) as usize;
-
-        let stream_loader_controller = StreamLoaderController::from_local_file(file_size);
-
-        let name = local_file_metadata.name.unwrap_or_default();
-
-        info!("Loaded <{name}> from path <{}>", path.display());
-
-        Some(PlayerLoadedTrackData {
-            decoder,
-            normalisation_data,
-            stream_loader_controller,
-            bytes_per_second,
-            duration_ms: duration.as_millis() as u32,
-            stream_position_ms,
-            is_explicit: false,
-            audio_item: AudioItem {
-                duration_ms: duration.as_millis() as u32,
-                uri: track_uri.to_uri(),
-                track_id: track_uri,
-                files: Default::default(),
-                name,
-                // We can't get a CoverImage.URL for the track image, applications will have to parse the file metadata themselves using unique_fields.path
-                covers: vec![],
-                language: local_file_metadata
-                    .language
-                    .map(|val| vec![val])
-                    .unwrap_or_default(),
-                is_explicit: false,
-                availability: Ok(()),
-                alternatives: None,
-                unique_fields: UniqueFields::Local {
-                    artists: local_file_metadata.artists,
-                    album: local_file_metadata.album,
-                    album_artists: local_file_metadata.album_artists,
-                    number: local_file_metadata.number,
-                    disc_number: local_file_metadata.disc_number,
-                    path: path.to_path_buf(),
+    let audio_item = match AudioItem::get_file(&self.session, SpotifyUri::Track{id:spotify_id}).await {
+        Ok(audio) => {
+            println!("[DEBUG] Got audio item. Attempting to find alternative if needed...");
+            match self.find_available_alternative(audio).await {
+                Some(alternative) => {
+                    println!("[DEBUG] Found available alternative: {}", alternative.name);
+                    alternative
                 },
-            },
-        })
+                None => {
+                    println!(
+                        "[WARN] <{}> is not available",
+                        spotify_id.to_uri().unwrap_or_default()
+                    );
+                    return decrypted_files;
+                }
+            }
+        },
+        Err(e) => {
+            println!("[ERROR] Unable to load audio item for Spotify ID {}: {:?}", spotify_id, e);
+            return decrypted_files;
+        }
+    };
+
+    println!("[DEBUG] Audio item details: {:?}", audio_item);
+    println!("[DEBUG] Checking all supported formats...");
+
+    let all_formats = [
+        AudioFileFormat::OGG_VORBIS_96,
+        AudioFileFormat::MP3_96,
+        AudioFileFormat::OGG_VORBIS_160,
+        AudioFileFormat::MP3_160,
+        AudioFileFormat::MP3_256,
+        AudioFileFormat::OGG_VORBIS_320,
+        AudioFileFormat::MP3_320,
+    ];
+
+
+    for format in all_formats.iter() {
+        println!("[DEBUG] Trying format: {:?}", format);
+        match audio_item.files.get(format) {
+            Some(&file_id) => {
+                println!("[DEBUG] Found file ID {:?} for format {:?}", file_id, format);
+
+                let bytes_per_second = match self.stream_data_rate(*format) {
+                    Some(bps) => {
+                        println!("[DEBUG] Bytes per second for format {:?}: {}", format, bps);
+                        bps
+                    },
+                    None => {
+                        println!("[WARN] No stream data rate for format {:?}, skipping...", format);
+                        continue;
+                    }
+                };
+
+                let encrypted_file = match AudioFile::open(&self.session, file_id, bytes_per_second).await {
+                    Ok(file) => {
+                        println!("[DEBUG] Successfully opened encrypted file for format {:?}", format);
+                        file
+                    },
+                    Err(e) => {
+                        println!("[WARN] Failed to open encrypted file for format {:?}: {:?}", format, e);
+                        continue;
+                    }
+                };
+
+                let key = match self.session.audio_key().request(spotify_id, file_id).await {
+    Ok(key) => {
+        println!("[DEBUG] Successfully retrieved decryption key for format {:?}", format);
+        // Access inner [u8; 16] and print as hex
+        println!(
+            "[DEBUG] Key bytes: {}",
+            key.0.iter().map(|b| format!("{:02x}", b)).collect::<String>()
+        );
+        Some(key)
+    },
+    Err(e) => {
+        println!("[WARN] Unable to load key for format {:?}, continuing without decryption: {}", format, e);
+        None
     }
+};
+
+
+
+                let decrypted_file = AudioDecrypt::new(key, encrypted_file);
+                println!("[DEBUG] Created decrypted file for format {:?}", format);
+
+                decrypted_files.push((*format, decrypted_file));
+            },
+            None => {
+                println!("[DEBUG] Format {:?} not available in audio_item.files", format);
+                continue;
+            }
+        }
+    }
+
+    println!("[DEBUG] Finished loading decrypted files. Total: {}", decrypted_files.len());
+    decrypted_files
 }
+
+
+}
+
 
 impl Future for PlayerInternal {
     type Output = ();
